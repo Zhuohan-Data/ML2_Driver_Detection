@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 #%%
+import keras.applications.vgg16
 import numpy as np
 import os
 import glob
@@ -32,8 +33,8 @@ color_type_global = 3
 # color_type = 1 - gray
 # color_type = 3 - RGB
 
-# os.chdir(r'F:\Driver\input')
-os.chdir("/home/ubuntu/ML2/Project/")
+os.chdir('/home/ubuntu/ML/Driver')
+#os.chdir("/home/ubuntu/ML2/Project/")
 
 def get_im(path, img_rows, img_cols, color_type=1):
     # Load as grayscale
@@ -56,7 +57,7 @@ def get_im(path, img_rows, img_cols, color_type=1):
 def get_driver_data():
 
     dr = dict()
-    path = os.path.join('.', 'data', 'driver_imgs_list.csv')
+    path = os.path.join('driver_imgs_list.csv')
     print('Read drivers data')
     f = open(path, 'r')
     line = f.readline()
@@ -80,7 +81,7 @@ def load_train(img_rows, img_cols, color_type=1):
     print('Read train images')
     for j in range(10):
         print('Load folder c{}'.format(j))
-        path = os.path.join('.', 'data', 'train',
+        path = os.path.join('imgs', 'train',
                             'c' + str(j), '*.jpg')
         files = glob.glob(path)
         for fl in files:
@@ -200,6 +201,7 @@ def read_and_normalize_and_shuffle_train_data(img_rows, img_cols,
         train_data = train_data.reshape(train_data.shape[0], color_type,
                                         img_rows, img_cols)
     else:
+        print(train_data.shape)
         train_data = train_data.transpose((0, 3, 1, 2))
 
     train_target = np_utils.to_categorical(train_target, 10)
@@ -283,59 +285,26 @@ def copy_selected_drivers(train_data, train_target, driver_id, driver_list):
     return data, target, index
 
 
-def vgg_std16_model(img_rows, img_cols, color_type=1):
-    model = Sequential()
-    model.add(ZeroPadding2D((1, 1), input_shape=(color_type,
-                                                 img_rows, img_cols)))
-    model.add(Convolution2D(64, 3, 3, activation='relu'))
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(64, 3, 3, activation='relu'))
-    model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+def definite_model(img_rows, img_cols, color_type=1):
+    # Add the pretrained layers
+    pretrained_model = keras.applications.vgg16.VGG16(include_top=False, weights='imagenet')
 
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(128, 3, 3, activation='relu'))
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(128, 3, 3, activation='relu'))
-    model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+    # Add GlobalAveragePooling2D layer
+    dropout = keras.layers.Dropout(rate=0.5)(pretrained_model.output)
 
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(256, 3, 3, activation='relu'))
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(256, 3, 3, activation='relu'))
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(256, 3, 3, activation='relu'))
-    model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+    # Add GlobalAveragePooling2D layer
+    average_pooling = keras.layers.GlobalAveragePooling2D()(dropout)
 
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(512, 3, 3, activation='relu'))
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(512, 3, 3, activation='relu'))
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(512, 3, 3, activation='relu'))
-    model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+    # Add the output layer
+    output = keras.layers.Dense(10, activation='softmax')(average_pooling)
 
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(512, 3, 3, activation='relu'))
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(512, 3, 3, activation='relu'))
-    model.add(ZeroPadding2D((1, 1)))
-    model.add(Convolution2D(512, 3, 3, activation='relu'))
-    model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+    # Get the model
+    model = keras.Model(inputs=pretrained_model.input, outputs=output)
 
-    model.add(Flatten())
-    model.add(Dense(4096, activation='relu'))
-    model.add(Dropout(0.5))
-    model.add(Dense(4096, activation='relu'))
-    model.add(Dropout(0.5))
-    model.add(Dense(1000, activation='softmax'))
+    model.summary()
 
-    model.load_weights('../input/vgg16_weights.h5')
-
-    # Code above loads pre-trained data and
-    model.layers.pop()
-    model.add(Dense(10, activation='softmax'))
     # Learning rate is changed to 0.001
-    sgd = SGD(lr=1e-3, decay=1e-6, momentum=0.9, nesterov=True)
+    sgd = SGD(learning_rate=1e-3, decay=1e-6, momentum=0.9, nesterov=True)
     model.compile(optimizer=sgd, loss='categorical_crossentropy')
     return model
 
@@ -363,9 +332,9 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
     # yfull_train = dict()
     # yfull_test = []
     num_fold = 0
-    kf = KFold(len(unique_drivers), n_splits=nfolds,
+    kf = KFold(n_splits=nfolds,
                shuffle=True, random_state=random_state)
-    for train_drivers, test_drivers in kf:
+    for train_drivers, test_drivers in kf.split(train_data):
         num_fold += 1
         print('Start KFold number {} from {}'.format(num_fold, nfolds))
         # print('Split train: ', len(X_train), len(Y_train))
@@ -374,11 +343,10 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
         # print('Test drivers: ', unique_list_valid)
         # model = create_model_v1(img_rows, img_cols, color_type_global)
         # model = vgg_bn_model(img_rows, img_cols, color_type_global)
-        model = vgg_std16_model(img_rows, img_cols, color_type_global)
+        model = definite_model(img_rows, img_cols, color_type_global)
 
         model.fit(train_data, train_target, batch_size=batch_size,
-                  nb_epoch=nb_epoch,
-                  show_accuracy=True, verbose=1,
+                  epochs=nb_epoch, verbose=1,
                   validation_split=split, shuffle=True)
 
         # print('losses: ' + hist.history.losses[-1])
