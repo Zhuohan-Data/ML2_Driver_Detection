@@ -30,12 +30,13 @@ import random
 from tensorflow.keras.initializers import glorot_uniform
 from tensorflow.keras.utils import to_categorical
 #%%
-os.chdir('/home/ubuntu/ML/Driver')
+# os.chdir('/home/ubuntu/ML/Driver')
 
 ## Process images in parallel
 AUTOTUNE = tf.data.AUTOTUNE
 # os.chdir("..")
-DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
+# DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
+DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
 sep = os.path.sep
 
 n_epoch = 2
@@ -58,19 +59,19 @@ color_type_global = 3
 # color_type = 1 - gray
 # color_type = 3 - RGB
 
-os.chdir('/home/ubuntu/ML/Driver')
+# os.chdir('/home/ubuntu/ML/Driver')
 #os.chdir("/home/ubuntu/ML2/Project/")
 
-def process_target(target_type,ds_targets):
+def process_target(target_type):
 
     dict_target = {}
     xerror = 0
 
     if target_type == 1:
-        final_target = to_categorical(list(ds_targets))
+        final_target = to_categorical(list(xdf_dset['target']))
     else:
-        # final_target = list(xdf_dset['target'])
-        final_target = list(ds_targets)
+        final_target = list(xdf_dset['target'])
+        # final_target = list(ds_targets)
     return final_target
 
 
@@ -93,29 +94,27 @@ def read_data(target_type,split='train'):
     ## xdf_dset ( data set )
     ## read the data data from the file
     if split=='train':
-        ds_inputs = np.array([])
-        ds_targets = np.array([])
-        k = np.array([])
-        for j in range(10):
-            path = os.path.join(DATA_DIR, 'train',
-                                'c'+str(j), '*.jpg')
-            ds_inputs=np.append(ds_inputs,glob.glob(path))
-            k = np.append(k,len(ds_inputs)-k.sum())
-            for i in range(int(k[j])):
-                ds_targets = np.append(ds_targets,j)
+        ds_inputs = np.array(DATA_DIR + 'train/' + xdf_dset['classname'] + '/' + xdf_dset['img'])
+
+        ds_targets =xdf_dset['target']
+        ds_inputs,ds_inputs_valid,ds_targets,ds_targets_valid=split_validation_set(ds_inputs,ds_targets,0.2)
+        ds_targets = to_categorical(list(ds_targets))
+
+        ds_targets_valid = to_categorical(list(ds_targets_valid))
     if split == 'test':
         test_path = os.path.join(DATA_DIR, 'test', '*.jpg')
         ds_inputs = glob.glob(test_path)
 
     print(ds_targets)
-    ds_targets = process_target(target_type,ds_targets)
 
     ## Make the channel as a list to make it variable
     list_ds = tf.data.Dataset.from_tensor_slices((ds_inputs,ds_targets))
+    list_ds_valid  = tf.data.Dataset.from_tensor_slices((ds_inputs_valid,ds_targets_valid))
 
     final_ds = list_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+    final_ds_valid = list_ds_valid.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
 
-    return final_ds
+    return final_ds,final_ds_valid
 
 
 #%%
@@ -229,7 +228,7 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
     batch_size = 64
     random_state = 20
 
-    train_data = read_data(target_type=1, split='train')
+    train_data,valid_data = read_data(target_type=1, split='train')
 
     # ishuf_train_data = []
     # shuf_train_target = []
@@ -242,27 +241,26 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
     # yfull_train = dict()
     # yfull_test = []
     num_fold = 0
-    kf = KFold(n_splits=nfolds,
-               shuffle=True, random_state=random_state)
-    for  train_drivers, test_drivers in kf.split(unique_drivers):
-        num_fold += 1
-        print('Start KFold number {} from {}'.format(num_fold, nfolds))
-        # print('Split train: ', len(X_train), len(Y_train))
-        # print('Split valid: ', len(X_valid), len(Y_valid))
-        # print('Train drivers: ', unique_list_train)
-        # print('Test drivers: ', unique_list_valid)
-        # model = create_model_v1(img_rows, img_cols, color_type_global)
-        # model = vgg_bn_model(img_rows, img_cols, color_type_global)
-        model = definite_model(img_rows, img_cols, color_type_global)
-
-        model.fit(train_data, batch_size=batch_size,
-                  epochs=nb_epoch, verbose=1,
-                  validation_split=split, shuffle=True)
+    # kf = KFold(n_splits=nfolds,
+    #            shuffle=True, random_state=random_state)
+    # for  train_drivers, test_drivers in kf.split(unique_drivers):
+    num_fold += 1
+    print('Start KFold number {} from {}'.format(num_fold, nfolds))
+    # print('Split train: ', len(X_train), len(Y_train))
+    # print('Split valid: ', len(X_valid), len(Y_valid))
+    # print('Train drivers: ', unique_list_train)
+    # print('Test drivers: ', unique_list_valid)
+    # model = create_model_v1(img_rows, img_cols, color_type_global)
+    # model = vgg_bn_model(img_rows, img_cols, color_type_global)
+    model = definite_model(img_rows, img_cols, color_type_global)
+    print(train_data)
+    model.fit(train_data, batch_size=batch_size,
+              epochs=nb_epoch, verbose=1, shuffle=True)
         #print('losses: ' + hist.history.losses[-1])
 
         #print('Score log_loss: ', score[0])
 
-        save_model(model, num_fold, modelStr)
+    save_model(model, num_fold, modelStr)
 
 
 
@@ -302,11 +300,15 @@ def test_model_and_submit(start=1, end=1, modelStr=''):
     test_res = merge_several_folds_mean(yfull_test, end - start + 1)
     create_submission(test_res, test_id, info_string)
 #%%
-FILE_NAME = os.getcwd()+ os.path.sep+  'driver_imgs_list.csv'
+# FILE_NAME = os.getcwd()+ os.path.sep+  'driver_imgs_list.csv'
+FILE_NAME = os.getcwd()+os.path.sep+'data'+ os.path.sep+  'driver_imgs_list.csv'
 xdf_dset = pd.read_csv(FILE_NAME)
 class_names = np.sort(xdf_dset['classname'].unique())
 x = lambda x : tf.argmax(x ==  class_names).numpy()
-
+split_list = []
+for i in range(len(xdf_dset)):
+    split_list.append('train') if xdf_dset['subject'][i] == 'p002' else split_list.append('validation')
+xdf_dset['split'] = split_list
 xdf_dset['target'] = xdf_dset['classname'].apply(x)
 # xdf_dset = xdf_data[xdf_data["split"] == 'train'].copy()
 
@@ -325,7 +327,9 @@ model.summary()
 # run_one_fold_cross_validation(10, 0.1)
 #%%
 test_model_and_submit(1, 1, 'Resnet50')
-
+#%%
+for i in ds1:
+    print(i)
 
 #%%
 read_data(target_type=1, split='train')
