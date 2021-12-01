@@ -36,7 +36,7 @@ from tensorflow.keras.utils import to_categorical
 AUTOTUNE = tf.data.AUTOTUNE
 # os.chdir("..")
 # DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
-DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
+DATA_DIR = os.getcwd()+os.path.sep + os.path.sep +'imgs' + os.path.sep
 sep = os.path.sep
 
 n_epoch = 2
@@ -58,19 +58,18 @@ color_type_global = 3
 
 # color_type = 1 - gray
 # color_type = 3 - RGB
-
-# os.chdir('/home/ubuntu/ML/Driver')
+os.chdir('/home/ubuntu/ML/Driver')
 #os.chdir("/home/ubuntu/ML2/Project/")
 
-def process_target(target_type):
+def process_target(target_type,target):
 
     dict_target = {}
     xerror = 0
 
     if target_type == 1:
-        final_target = to_categorical(list(xdf_dset['target']))
+        final_target = to_categorical(list(target))
     else:
-        final_target = list(xdf_dset['target'])
+        final_target = list(target)
         # final_target = list(ds_targets)
     return final_target
 
@@ -87,7 +86,7 @@ def process_path(feature, target):
     img = tf.io.decode_jpeg(img, channels=CHANNELS)
 
     resized = tf.image.resize(img, [IMAGE_SIZE, IMAGE_SIZE])
-    return resized
+    return resized,label
 
 def read_data(target_type,split='train'):
     ## Only the training set
@@ -98,9 +97,10 @@ def read_data(target_type,split='train'):
 
         ds_targets =xdf_dset['target']
         ds_inputs,ds_inputs_valid,ds_targets,ds_targets_valid=split_validation_set(ds_inputs,ds_targets,0.2)
-        ds_targets = to_categorical(list(ds_targets))
+        ds_targets = process_target(1,ds_targets)
 
-        ds_targets_valid = to_categorical(list(ds_targets_valid))
+        ds_targets_valid = process_target(1,ds_targets_valid)
+
     if split == 'test':
         test_path = os.path.join(DATA_DIR, 'test', '*.jpg')
         ds_inputs = glob.glob(test_path)
@@ -255,7 +255,7 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
     model = definite_model(img_rows, img_cols, color_type_global)
     print(train_data)
     model.fit(train_data, batch_size=batch_size,
-              epochs=nb_epoch, verbose=1, shuffle=True)
+              epochs=nb_epoch, validation_data = valid_data,verbose=1, shuffle=True)
         #print('losses: ' + hist.history.losses[-1])
 
         #print('Score log_loss: ', score[0])
@@ -301,7 +301,7 @@ def test_model_and_submit(start=1, end=1, modelStr=''):
     create_submission(test_res, test_id, info_string)
 #%%
 # FILE_NAME = os.getcwd()+ os.path.sep+  'driver_imgs_list.csv'
-FILE_NAME = os.getcwd()+os.path.sep+'data'+ os.path.sep+  'driver_imgs_list.csv'
+FILE_NAME = os.getcwd()+ os.path.sep+  'driver_imgs_list.csv'
 xdf_dset = pd.read_csv(FILE_NAME)
 class_names = np.sort(xdf_dset['classname'].unique())
 x = lambda x : tf.argmax(x ==  class_names).numpy()
@@ -328,8 +328,27 @@ model.summary()
 #%%
 test_model_and_submit(1, 1, 'Resnet50')
 #%%
-for i in ds1:
+for i in final_ds:
     print(i)
 
 #%%
 read_data(target_type=1, split='train')
+
+#%%
+ds_inputs = np.array(DATA_DIR + 'train/' + xdf_dset['classname'] + '/' + xdf_dset['img'])
+
+ds_targets = xdf_dset['target']
+#%%
+ds_inputs, ds_inputs_valid, ds_targets, ds_targets_valid = split_validation_set(ds_inputs, ds_targets, 0.2)
+
+#%%
+ds_targets = process_target(1, ds_targets)
+
+ds_targets_valid = process_target(1, ds_targets_valid)
+
+#%%
+list_ds = tf.data.Dataset.from_tensor_slices((ds_inputs, ds_targets))
+list_ds_valid = tf.data.Dataset.from_tensor_slices((ds_inputs_valid, ds_targets_valid))
+#%%
+final_ds = list_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+# final_ds_valid = list_ds_valid.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
