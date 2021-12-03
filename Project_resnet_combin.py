@@ -36,10 +36,11 @@ from tensorflow.keras.utils import to_categorical
 AUTOTUNE = tf.data.AUTOTUNE
 # os.chdir("..")
 # DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
-DATA_DIR = os.getcwd()+os.path.sep + os.path.sep +'imgs' + os.path.sep
+DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
+CSV_DIR = os.getcwd()+os.path.sep+'data'+os.path.sep+'driver_imgs_list.csv'
 sep = os.path.sep
 
-n_epoch = 2
+n_epoch = 10
 BATCH_SIZE = 16
 
 CHANNELS = 3
@@ -58,7 +59,7 @@ color_type_global = 3
 
 # color_type = 1 - gray
 # color_type = 3 - RGB
-os.chdir('/home/ubuntu/ML/Driver')
+# os.chdir('/home/ubuntu/ML/Driver')
 #os.chdir("/home/ubuntu/ML2/Project/")
 
 def process_target(target_type,target):
@@ -88,6 +89,20 @@ def process_path(feature, target):
     resized = tf.image.resize(img, [IMAGE_SIZE, IMAGE_SIZE])
     return resized,label
 
+def process_path_test(feature):
+    # Processing Label
+
+    # label = target
+    # Processing feature
+    # load the raw data from the file as a string
+    file_path = feature
+    img = tf.io.read_file(file_path)
+
+    img = tf.io.decode_jpeg(img, channels=CHANNELS)
+
+    resized = tf.image.resize(img, [IMAGE_SIZE, IMAGE_SIZE])
+    return resized
+
 def read_data(target_type,split='train'):
     ## Only the training set
     ## xdf_dset ( data set )
@@ -100,21 +115,24 @@ def read_data(target_type,split='train'):
         ds_targets = process_target(1,ds_targets)
 
         ds_targets_valid = process_target(1,ds_targets_valid)
+        list_ds = tf.data.Dataset.from_tensor_slices((ds_inputs, ds_targets))
+        list_ds_valid = tf.data.Dataset.from_tensor_slices((ds_inputs_valid, ds_targets_valid))
 
+        final_ds = list_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+        final_ds_valid = list_ds_valid.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+
+        return final_ds, final_ds_valid
     if split == 'test':
         test_path = os.path.join(DATA_DIR, 'test', '*.jpg')
         ds_inputs = glob.glob(test_path)
+        list_ds = tf.data.Dataset.from_tensor_slices(ds_inputs)
+        final_ds = list_ds.map(process_path_test, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+        return final_ds
 
-    print(ds_targets)
+    # print(ds_targets)
 
     ## Make the channel as a list to make it variable
-    list_ds = tf.data.Dataset.from_tensor_slices((ds_inputs,ds_targets))
-    list_ds_valid  = tf.data.Dataset.from_tensor_slices((ds_inputs_valid,ds_targets_valid))
 
-    final_ds = list_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
-    final_ds_valid = list_ds_valid.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
-
-    return final_ds,final_ds_valid
 
 
 #%%
@@ -263,7 +281,7 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
     save_model(model, num_fold, modelStr)
 
 
-
+#%%
 def test_model_and_submit(start=1, end=1, modelStr=''):
     img_rows, img_cols = 50, 50
     # batch_size = 64
@@ -271,7 +289,7 @@ def test_model_and_submit(start=1, end=1, modelStr=''):
     nb_epoch = 15
 
     print('Start testing............')
-    test_data = read_data(target_type=1, split='train')
+    test_data = read_data(target_type=1, split='test')
 
     test_path = os.path.join(DATA_DIR, 'test', '*.jpg')
     images = glob.glob(test_path)
@@ -287,7 +305,8 @@ def test_model_and_submit(start=1, end=1, modelStr=''):
     for index in range(start, end + 1):
         # Store test predictions
         model = read_model(index, modelStr)
-        test_prediction = model.predict(test_data, batch_size=32, verbose=1)
+        # test_prediction = model.predict(test_data, batch_size=32, verbose=1)
+        test_prediction = model.predict(test_data)
 
         yfull_test.append(test_prediction)
 
@@ -298,11 +317,12 @@ def test_model_and_submit(start=1, end=1, modelStr=''):
                   + '_ep_' + str(nb_epoch)
 
     test_res = merge_several_folds_mean(yfull_test, end - start + 1)
-    create_submission(test_res, test_id, info_string)
+    create_submission(test_res, test_ids, info_string)
 #%%
 # FILE_NAME = os.getcwd()+ os.path.sep+  'driver_imgs_list.csv'
-FILE_NAME = os.getcwd()+ os.path.sep+  'driver_imgs_list.csv'
-xdf_dset = pd.read_csv(FILE_NAME)
+# FILE_NAME = os.getcwd()+ os.path.sep+  'driver_imgs_list.csv'
+# xdf_dset = pd.read_csv(FILE_NAME)
+xdf_dset = pd.read_csv(CSV_DIR)
 class_names = np.sort(xdf_dset['classname'].unique())
 x = lambda x : tf.argmax(x ==  class_names).numpy()
 split_list = []
@@ -319,36 +339,36 @@ print(unique_drivers)
 
 #%%
 # nfolds, nb_epoch, split
-run_cross_validation(2, 3, 0.15, 'Resnet50')
+run_cross_validation(2, n_epoch, 0.15, 'Resnet50')
 
-model.summary()
+# model.summary()
 
 # nb_epoch, split
 # run_one_fold_cross_validation(10, 0.1)
 #%%
 test_model_and_submit(1, 1, 'Resnet50')
 #%%
-for i in final_ds:
-    print(i)
+# for i in final_ds:
+#     print(i)
 
 #%%
-read_data(target_type=1, split='train')
-
-#%%
-ds_inputs = np.array(DATA_DIR + 'train/' + xdf_dset['classname'] + '/' + xdf_dset['img'])
-
-ds_targets = xdf_dset['target']
-#%%
-ds_inputs, ds_inputs_valid, ds_targets, ds_targets_valid = split_validation_set(ds_inputs, ds_targets, 0.2)
-
-#%%
-ds_targets = process_target(1, ds_targets)
-
-ds_targets_valid = process_target(1, ds_targets_valid)
-
-#%%
-list_ds = tf.data.Dataset.from_tensor_slices((ds_inputs, ds_targets))
-list_ds_valid = tf.data.Dataset.from_tensor_slices((ds_inputs_valid, ds_targets_valid))
-#%%
-final_ds = list_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+# read_data(target_type=1, split='train')
+#
+# #%%
+# ds_inputs = np.array(DATA_DIR + 'train/' + xdf_dset['classname'] + '/' + xdf_dset['img'])
+#
+# ds_targets = xdf_dset['target']
+# #%%
+# ds_inputs, ds_inputs_valid, ds_targets, ds_targets_valid = split_validation_set(ds_inputs, ds_targets, 0.2)
+#
+# #%%
+# ds_targets = process_target(1, ds_targets)
+#
+# ds_targets_valid = process_target(1, ds_targets_valid)
+#
+# #%%
+# list_ds = tf.data.Dataset.from_tensor_slices((ds_inputs, ds_targets))
+# list_ds_valid = tf.data.Dataset.from_tensor_slices((ds_inputs_valid, ds_targets_valid))
+# #%%
+# final_ds = list_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
 # final_ds_valid = list_ds_valid.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
