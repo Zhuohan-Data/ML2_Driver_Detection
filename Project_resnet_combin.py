@@ -42,8 +42,9 @@ DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
 CSV_DIR = os.getcwd()+os.path.sep+'data'+os.path.sep+'driver_imgs_list.csv'
 sep = os.path.sep
 
+nfolds=5
 n_epoch = 5
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 
 CHANNELS = 3
 IMAGE_SIZE = 224
@@ -57,7 +58,6 @@ random_state = 51
 
 DROPOUT = 0.2
 LR = 1e-3
-nfolds=2
 
 
 # color type: 1 - grey, 3 - rgb
@@ -272,6 +272,7 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
     num_fold = 0
     kf = KFold(n_splits=nfolds,
                shuffle=True, random_state=random_state)
+    val_acc_best = 0
     # for  train_drivers, test_drivers in kf.split(unique_drivers):
     for train_index, valid_index in kf.split(ds_inputs):
         num_fold += 1
@@ -288,7 +289,7 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
 
         model = model_definition()
 
-        model.fit(train_data,
+        history = model.fit(train_data,
                   # batch_size=batch_size,
                   epochs=nb_epoch,
                   validation_data = valid_data,
@@ -299,13 +300,16 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
             #print('losses: ' + hist.history.losses[-1])
 
             #print('Score log_loss: ', score[0])
-
-        save_model(model, num_fold, modelStr)
+        if val_acc_best < max(history.history['val_accuracy']):
+            val_acc_best = max(history.history['val_accuracy'])
+            save_model(model, 'best', modelStr)
+            print('best model saved')
+        # save_model(model, num_fold, modelStr)
 
 
 #%%
 def test_model_and_submit(start=1, end=1, modelStr=''):
-    img_rows, img_cols = 224, 224
+    img_rows, img_cols = IMAGE_SIZE,IMAGE_SIZE
     # batch_size = 64
     # random_state = 51
 
@@ -321,24 +325,25 @@ def test_model_and_submit(start=1, end=1, modelStr=''):
         test_ids.append(img_id)
 
 
-    yfull_test = []
-
-    for index in range(start, end + 1):
-        # Store test predictions
-        model = read_model(index, modelStr)
-        # test_prediction = model.predict(test_data, batch_size=32, verbose=1)
-        test_prediction = model.predict(test_data)
-
-        yfull_test.append(test_prediction)
+    # yfull_test = []
+    #
+    # for index in range(start, end + 1):
+    #     # Store test predictions
+    #     model = read_model(index, modelStr)
+    #     # test_prediction = model.predict(test_data, batch_size=32, verbose=1)
+    #     test_prediction = model.predict(test_data)
+    #
+    #     yfull_test.append(test_prediction)
 
     info_string = 'loss_' + modelStr \
                   + '_r_' + str(img_rows) \
                   + '_c_' + str(img_cols) \
                   + '_folds_' + str(end - start + 1)
-
-
-    test_res = merge_several_folds_mean(yfull_test, end - start + 1)
+    model = read_model('best',modelStr)
+    test_res = model.predict(test_data)
+    # test_res = merge_several_folds_mean(yfull_test, end - start + 1)
     create_submission(test_res, test_ids, info_string)
+    print('finished')
 #%%
 xdf_dset = pd.read_csv(CSV_DIR)
 class_names = np.sort(xdf_dset['classname'].unique())
