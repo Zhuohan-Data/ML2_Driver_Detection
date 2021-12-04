@@ -30,19 +30,19 @@ import random
 from tensorflow.keras.initializers import glorot_uniform
 from tensorflow.keras.utils import to_categorical
 #%%
-os.chdir('/home/ubuntu/ML/Driver')
+# os.chdir('/home/ubuntu/ML/Driver')
 #os.chdir("/home/ubuntu/ML2/Project/")
 
 ## Process images in parallel
 AUTOTUNE = tf.data.AUTOTUNE
-
-DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
-CSV_DIR = os.getcwd()+os.path.sep+'driver_imgs_list.csv'
-#DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
-#CSV_DIR = os.getcwd()+os.path.sep+'data'+os.path.sep+'driver_imgs_list.csv'
+# os.chdir('/home/ubuntu/ML/Driver')
+# DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
+# CSV_DIR = os.getcwd()+os.path.sep+'driver_imgs_list.csv'
+DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
+CSV_DIR = os.getcwd()+os.path.sep+'data'+os.path.sep+'driver_imgs_list.csv'
 sep = os.path.sep
 
-n_epoch = 10
+n_epoch = 5
 BATCH_SIZE = 16
 
 CHANNELS = 3
@@ -53,9 +53,11 @@ random.seed(SEED)
 np.random.seed(SEED)
 tf.random.set_seed(SEED)
 weight_init = glorot_uniform(seed=SEED)
+random_state = 51
 
 DROPOUT = 0.2
 LR = 1e-3
+nfolds=2
 
 
 # color type: 1 - grey, 3 - rgb
@@ -103,14 +105,14 @@ def process_path_test(feature):
     resized = tf.image.resize(img, [IMAGE_SIZE, IMAGE_SIZE])
     return resized
 
-def read_data(target_type,split='train'):
+def read_data(target_type,split='train',train_index=0,valid_index=0):
 
     if split=='train':
-        ds_inputs = np.array(DATA_DIR + 'train/' + xdf_dset['classname'] + '/' + xdf_dset['img'])
-        ds_targets =xdf_dset['target']
 
-        train_data,val_data,train_targets,val_targets =split_validation_set(ds_inputs,ds_targets,0.2)
 
+        # train_data,val_data,train_targets,val_targets =split_validation_set(ds_inputs,ds_targets,0.2)
+        train_data,val_data = ds_inputs[train_index],ds_inputs[valid_index]
+        train_targets, val_targets = ds_targets[train_index], ds_targets[valid_index]
         train_targets = process_target(target_type,train_targets)
         val_targets = process_target(target_type,val_targets)
         train_ds = tf.data.Dataset.from_tensor_slices((train_data, train_targets))
@@ -147,7 +149,6 @@ def read_model(index, cross=''):
 
 
 def split_validation_set(train, target, test_size):
-    random_state = 51
     X_train, X_test, y_train, y_test = \
         train_test_split(train, target,
                          test_size=test_size,
@@ -242,11 +243,11 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
 
     # Now it loads color image
     # input image dimensions
-    img_rows, img_cols = 100, 100
-    batch_size = 64
+    # img_rows, img_cols = 100, 100
+    # batch_size = 64
 
-    train_data,valid_data = read_data(target_type=1, split='train')
-    print(train_data)
+
+    # print(train_data)
     # ishuf_train_data = []
     # shuf_train_target = []
     # index_shuf = range(len(train_target))
@@ -257,12 +258,6 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
 
     # yfull_train = dict()
     # yfull_test = []
-    num_fold = 0
-    # kf = KFold(n_splits=nfolds,
-    #            shuffle=True, random_state=random_state)
-    # for  train_drivers, test_drivers in kf.split(unique_drivers):
-    num_fold += 1
-    print('Start KFold number {} from {}'.format(num_fold, nfolds))
 
     # ModelCheckpoint callback
     if not os.path.isdir('Checkpoints'):
@@ -274,25 +269,38 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
     early_stopping_cb = keras.callbacks.EarlyStopping(patience=2, restore_best_weights=True)
     # ReduceLROnPlateau callback
     reduce_lr_on_plateau_cb = keras.callbacks.ReduceLROnPlateau(factor=0.1, patience=1)
+    num_fold = 0
+    kf = KFold(n_splits=nfolds,
+               shuffle=True, random_state=random_state)
+    # for  train_drivers, test_drivers in kf.split(unique_drivers):
+    for train_index, valid_index in kf.split(ds_inputs):
+        num_fold += 1
+        print('Start KFold number {} from {}'.format(num_fold, nfolds))
+        train_data, valid_data = read_data(target_type=1, split='train',
+                                           train_index=train_index,valid_index=valid_index)
 
-    # Get the number of samples in the training data
-    # m = tf.data.experimental.cardinality(train_data).numpy()
-    # # Set the decay_steps
-    # s = int(20 * m / BATCH_SIZE)
-    # print('Learning Scheduling Decay_Steps:', s)
 
-    model = model_definition()
+        # Get the number of samples in the training data
+        # m = tf.data.experimental.cardinality(train_data).numpy()
+        # # Set the decay_steps
+        # s = int(20 * m / BATCH_SIZE)
+        # print('Learning Scheduling Decay_Steps:', s)
 
-    model.fit(train_data, batch_size=batch_size,
-              epochs=nb_epoch, validation_data = valid_data,verbose=1, shuffle=True,
-              callbacks=[model_checkpoint_cb,
-                               early_stopping_cb,
-                         reduce_lr_on_plateau_cb])
-        #print('losses: ' + hist.history.losses[-1])
+        model = model_definition()
 
-        #print('Score log_loss: ', score[0])
+        model.fit(train_data,
+                  # batch_size=batch_size,
+                  epochs=nb_epoch,
+                  validation_data = valid_data,
+                  verbose=1, shuffle=True,
+                  callbacks=[model_checkpoint_cb,
+                                   early_stopping_cb,
+                             reduce_lr_on_plateau_cb])
+            #print('losses: ' + hist.history.losses[-1])
 
-    save_model(model, num_fold, modelStr)
+            #print('Score log_loss: ', score[0])
+
+        save_model(model, num_fold, modelStr)
 
 
 #%%
@@ -332,16 +340,13 @@ def test_model_and_submit(start=1, end=1, modelStr=''):
     test_res = merge_several_folds_mean(yfull_test, end - start + 1)
     create_submission(test_res, test_ids, info_string)
 #%%
-# FILE_NAME = os.getcwd()+ os.path.sep+  'driver_imgs_list.csv'
-# FILE_NAME = os.getcwd()+ os.path.sep+  'driver_imgs_list.csv'
-# xdf_dset = pd.read_csv(FILE_NAME)
 xdf_dset = pd.read_csv(CSV_DIR)
 class_names = np.sort(xdf_dset['classname'].unique())
 x = lambda x : tf.argmax(x ==  class_names).numpy()
-split_list = []
-for i in range(len(xdf_dset)):
-    split_list.append('train') if xdf_dset['subject'][i] == 'p002' else split_list.append('validation')
-xdf_dset['split'] = split_list
+# split_list = []
+# for i in range(len(xdf_dset)):
+#     split_list.append('train') if xdf_dset['subject'][i] == 'p002' else split_list.append('validation')
+# xdf_dset['split'] = split_list
 xdf_dset['target'] = xdf_dset['classname'].apply(x)
 # xdf_dset = xdf_data[xdf_data["split"] == 'train'].copy()
 
@@ -349,11 +354,13 @@ driver_id = xdf_dset['subject']
 unique_drivers = sorted(list(set(driver_id)))
 print('Unique drivers: {}'.format(len(unique_drivers)))
 print(unique_drivers)
-
+#%%
+ds_inputs = np.array(DATA_DIR + 'train/' + xdf_dset['classname'] + '/' + xdf_dset['img'])
+ds_targets = xdf_dset['target']
 #%%
 # nfolds, nb_epoch, split
-run_cross_validation(2, 5, 0.15, 'Resnet50')
-
+# run_cross_validation(2, 5, 0.15, 'Resnet50')
+run_cross_validation(nfolds,n_epoch,0.15,"Resnet50")
 # model.summary()
 
 # nb_epoch, split
