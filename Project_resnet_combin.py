@@ -47,7 +47,7 @@ n_epoch = 5
 BATCH_SIZE = 16
 
 CHANNELS = 3
-IMAGE_SIZE = 224
+IMAGE_SIZE = 299
 
 SEED = 42
 random.seed(SEED)
@@ -103,15 +103,14 @@ def process_path_aug(feature, target):
 
     img = tf.io.decode_jpeg(img, channels=CHANNELS)
 
-    resized = tf.image.resize(img, [IMAGE_SIZE, IMAGE_SIZE])
 
-    i = random.randrange(20)
-    seed = (i, 5)
-    img = (resized/255.0)
-    img_random_brightness = tf.image.stateless_random_brightness(img, max_delta=0.5, seed=seed)
-    aug_img = tf.image.stateless_random_contrast(img_random_brightness, lower=0.1, upper=0.6, seed=seed)
-
-
+    #i = random.randrange(20)
+    seed = (1, 5)
+    img = tf.cast(img, tf.float32) / 255.0
+    img_random_brightness = tf.image.stateless_random_brightness(img, max_delta=0.2, seed=seed)
+    img_random_contrast = tf.image.stateless_random_contrast(img_random_brightness, lower=0.1, upper=0.2, seed=seed)
+    img_random_crop = tf.image.stateless_random_crop(img_random_contrast, size=[IMAGE_SIZE-15, IMAGE_SIZE-15, 3], seed=seed)
+    aug_img = tf.image.resize(img_random_crop, [IMAGE_SIZE, IMAGE_SIZE])
 
     return aug_img, label
 
@@ -138,13 +137,21 @@ def read_data(target_type,split='train',train_index=0,valid_index=0,method='spli
         else:
             train_data, val_data = ds_inputs[train_index], ds_inputs[valid_index]
             train_targets, val_targets = ds_targets[train_index], ds_targets[valid_index]
+
+        nope_data, aug_data, nope_targets, aug_targets = split_validation_set(train_data, train_targets, 0.1)
+
         train_targets = process_target(target_type, train_targets)
         val_targets = process_target(target_type, val_targets)
-        # double array for aug
-        train_data, train_targets = np.concatenate([train_data,train_data]), np.concatenate([train_targets,train_targets])
+        aug_targets = process_target(target_type, aug_targets)
+
         train_ds = tf.data.Dataset.from_tensor_slices((train_data, train_targets))
         val_ds = tf.data.Dataset.from_tensor_slices((val_data, val_targets))
-        final_train_ds = train_ds.map(process_path_aug, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+        aug_ds = tf.data.Dataset.from_tensor_slices((aug_data, aug_targets))
+
+        train_ds = train_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+        aug_ds = aug_ds.map(process_path_aug, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+        final_train_ds = train_ds.concatenate(aug_ds)
+
         final_val_ds = val_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
 
         return final_train_ds, final_val_ds
@@ -246,7 +253,7 @@ def model_definition():
     pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2B2(include_top=False, weights='imagenet')
     #pretrained_model = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet')
     # Add GlobalAveragePooling2D layer
-    dropout = keras.layers.Dropout(rate=0.5)(pretrained_model.output)
+    dropout = keras.layers.Dropout(rate=0.8)(pretrained_model.output)
 
     # Add GlobalAveragePooling2D layer
     average_pooling = keras.layers.GlobalAveragePooling2D()(dropout)
