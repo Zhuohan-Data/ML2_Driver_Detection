@@ -47,7 +47,7 @@ n_epoch = 5
 BATCH_SIZE = 16
 
 CHANNELS = 3
-IMAGE_SIZE = 299
+IMAGE_SIZE = 224
 
 SEED = 42
 random.seed(SEED)
@@ -56,7 +56,7 @@ tf.random.set_seed(SEED)
 weight_init = glorot_uniform(seed=SEED)
 random_state = 51
 
-DROPOUT = 0.2
+#DROPOUT = 0.2
 LR = 1e-3
 
 
@@ -138,19 +138,19 @@ def read_data(target_type,split='train',train_index=0,valid_index=0,method='spli
             train_data, val_data = ds_inputs[train_index], ds_inputs[valid_index]
             train_targets, val_targets = ds_targets[train_index], ds_targets[valid_index]
 
-        nope_data, aug_data, nope_targets, aug_targets = split_validation_set(train_data, train_targets, 0.1)
+        #nope_data, aug_data, nope_targets, aug_targets = split_validation_set(train_data, train_targets, 0.1)
 
         train_targets = process_target(target_type, train_targets)
         val_targets = process_target(target_type, val_targets)
-        aug_targets = process_target(target_type, aug_targets)
+        #aug_targets = process_target(target_type, aug_targets)
 
         train_ds = tf.data.Dataset.from_tensor_slices((train_data, train_targets))
         val_ds = tf.data.Dataset.from_tensor_slices((val_data, val_targets))
-        aug_ds = tf.data.Dataset.from_tensor_slices((aug_data, aug_targets))
+        #aug_ds = tf.data.Dataset.from_tensor_slices((aug_data, aug_targets))
 
-        train_ds = train_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
-        aug_ds = aug_ds.map(process_path_aug, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
-        final_train_ds = train_ds.concatenate(aug_ds)
+        final_train_ds = train_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+        #aug_ds = aug_ds.map(process_path_aug, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+        #final_train_ds = train_ds.concatenate(aug_ds)
 
         final_val_ds = val_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
 
@@ -251,9 +251,12 @@ def model_definition():
     #pretrained_model = keras.applications.densenet.DenseNet201(include_top=False, weights='imagenet')
     #pretrained_model = tf.keras.applications.efficientnet.EfficientNetB2(include_top=False, weights='imagenet')
     pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2B2(include_top=False, weights='imagenet')
+    #pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2B3(include_top=False, weights='imagenet')
+    #pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2M(include_top=False, weights='imagenet')
+    #pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2L(include_top=False, weights='imagenet')
     #pretrained_model = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet')
     # Add GlobalAveragePooling2D layer
-    dropout = keras.layers.Dropout(rate=0.8)(pretrained_model.output)
+    dropout = keras.layers.Dropout(rate=0.5)(pretrained_model.output)
 
     # Add GlobalAveragePooling2D layer
     average_pooling = keras.layers.GlobalAveragePooling2D()(dropout)
@@ -405,10 +408,10 @@ ds_targets = xdf_dset['target']
 #%%
 # nfolds, nb_epoch, split
 
-run_cross_validation(2,10,0.15,"EfficientNetV2B2",'split')
+run_cross_validation(2,10,0.15,"EfficientNetV2B2-224",'split')
 # model.summary()
 
 # nb_epoch, split
 # run_one_fold_cross_validation(10, 0.1)
 #%%
-test_model_and_submit(0, 0, "EfficientNetV2B2")
+test_model_and_submit(0, 0, "EfficientNetV2B2-224")
