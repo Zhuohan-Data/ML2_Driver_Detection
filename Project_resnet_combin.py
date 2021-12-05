@@ -30,21 +30,21 @@ import random
 from tensorflow.keras.initializers import glorot_uniform
 from tensorflow.keras.utils import to_categorical
 #%%
-# os.chdir('/home/ubuntu/ML/Driver')
+os.chdir('/home/ubuntu/ML/Driver')
 #os.chdir("/home/ubuntu/ML2/Project/")
 
 ## Process images in parallel
 AUTOTUNE = tf.data.AUTOTUNE
-# os.chdir('/home/ubuntu/ML/Driver')
-# DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
-# CSV_DIR = os.getcwd()+os.path.sep+'driver_imgs_list.csv'
-DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
-CSV_DIR = os.getcwd()+os.path.sep+'data'+os.path.sep+'driver_imgs_list.csv'
+
+DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
+CSV_DIR = os.getcwd()+os.path.sep+'driver_imgs_list.csv'
+#DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
+#CSV_DIR = os.getcwd()+os.path.sep+'data'+os.path.sep+'driver_imgs_list.csv'
 sep = os.path.sep
 
 nfolds=5
 n_epoch = 5
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 
 CHANNELS = 3
 IMAGE_SIZE = 224
@@ -89,7 +89,31 @@ def process_path(feature, target):
     img = tf.io.decode_jpeg(img, channels=CHANNELS)
 
     resized = tf.image.resize(img, [IMAGE_SIZE, IMAGE_SIZE])
+
+
     return resized,label
+
+def process_path_aug(feature, target):
+    # Processing Label
+    label = target
+    # Processing feature
+    # load the raw data from the file as a string
+    file_path = feature
+    img = tf.io.read_file(file_path)
+
+    img = tf.io.decode_jpeg(img, channels=CHANNELS)
+
+    resized = tf.image.resize(img, [IMAGE_SIZE, IMAGE_SIZE])
+
+    i = random.randrange(20)
+    seed = (i, 5)
+    img = (resized/255.0)
+    img_random_brightness = tf.image.stateless_random_brightness(img, max_delta=0.5, seed=seed)
+    aug_img = tf.image.stateless_random_contrast(img_random_brightness, lower=0.1, upper=0.6, seed=seed)
+
+
+
+    return aug_img, label
 
 def process_path_test(feature):
     # Processing Label
@@ -105,19 +129,22 @@ def process_path_test(feature):
     resized = tf.image.resize(img, [IMAGE_SIZE, IMAGE_SIZE])
     return resized
 
-def read_data(target_type,split='train',train_index=0,valid_index=0):
+def read_data(target_type,split='train',train_index=0,valid_index=0,method='split'):
 
     if split=='train':
 
-
-        # train_data,val_data,train_targets,val_targets =split_validation_set(ds_inputs,ds_targets,0.2)
-        train_data,val_data = ds_inputs[train_index],ds_inputs[valid_index]
-        train_targets, val_targets = ds_targets[train_index], ds_targets[valid_index]
-        train_targets = process_target(target_type,train_targets)
-        val_targets = process_target(target_type,val_targets)
+        if method=='split':
+            train_data,val_data,train_targets,val_targets =split_validation_set(ds_inputs,ds_targets,0.2)
+        else:
+            train_data, val_data = ds_inputs[train_index], ds_inputs[valid_index]
+            train_targets, val_targets = ds_targets[train_index], ds_targets[valid_index]
+        train_targets = process_target(target_type, train_targets)
+        val_targets = process_target(target_type, val_targets)
+        # double array for aug
+        train_data, train_targets = np.concatenate([train_data,train_data]), np.concatenate([train_targets,train_targets])
         train_ds = tf.data.Dataset.from_tensor_slices((train_data, train_targets))
         val_ds = tf.data.Dataset.from_tensor_slices((val_data, val_targets))
-        final_train_ds = train_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+        final_train_ds = train_ds.map(process_path_aug, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
         final_val_ds = val_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
 
         return final_train_ds, final_val_ds
@@ -207,11 +234,17 @@ def copy_selected_drivers(train_data, train_target, driver_id, driver_list):
     index = np.array(index, dtype=np.uint32)
     return data, target, index
 
-
+#%%
 def model_definition():
     # Add the pretrained layers
-    pretrained_model = keras.applications.ResNet50(include_top=False, weights='imagenet')
-
+    #pretrained_model = tf.keras.applications.ResNet50V2(include_top=False, weights='imagenet')
+    #pretrained_model = keras.applications.resnet_v2.ResNet152V2(include_top=False, weights='imagenet')
+    #pretrained_model = keras.applications.densenet.DenseNet121(include_top=False, weights='imagenet')
+    #pretrained_model = keras.applications.densenet.DenseNet169(include_top=False, weights='imagenet')
+    #pretrained_model = keras.applications.densenet.DenseNet201(include_top=False, weights='imagenet')
+    #pretrained_model = tf.keras.applications.efficientnet.EfficientNetB2(include_top=False, weights='imagenet')
+    pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2B2(include_top=False, weights='imagenet')
+    #pretrained_model = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet')
     # Add GlobalAveragePooling2D layer
     dropout = keras.layers.Dropout(rate=0.5)(pretrained_model.output)
 
@@ -239,25 +272,8 @@ def model_definition():
     return model
 
 
-def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
+def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr='', method='split' ):
 
-    # Now it loads color image
-    # input image dimensions
-    # img_rows, img_cols = 100, 100
-    # batch_size = 64
-
-
-    # print(train_data)
-    # ishuf_train_data = []
-    # shuf_train_target = []
-    # index_shuf = range(len(train_target))
-    # shuffle(index_shuf)
-    # for i in index_shuf:
-    #     shuf_train_data.append(train_data[i])
-    #     shuf_train_target.append(train_target[i])
-
-    # yfull_train = dict()
-    # yfull_test = []
 
     # ModelCheckpoint callback
     if not os.path.isdir('Checkpoints'):
@@ -269,21 +285,38 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
     early_stopping_cb = keras.callbacks.EarlyStopping(patience=2, restore_best_weights=True)
     # ReduceLROnPlateau callback
     reduce_lr_on_plateau_cb = keras.callbacks.ReduceLROnPlateau(factor=0.1, patience=1)
+
+    # Kfold
     num_fold = 0
     kf = KFold(n_splits=nfolds,
                shuffle=True, random_state=random_state)
     val_acc_best = 0
     # for  train_drivers, test_drivers in kf.split(unique_drivers):
-    for train_index, valid_index in kf.split(ds_inputs):
-        num_fold += 1
-        print('Start KFold number {} from {}'.format(num_fold, nfolds))
+    if method=='split':
+        model = model_definition()
         train_data, valid_data = read_data(target_type=1, split='train',
-                                           train_index=train_index,valid_index=valid_index)
+                                           method=method)
+        history = model.fit(train_data,
+                            # batch_size=batch_size,
+                            epochs=nb_epoch,
+                            validation_data=valid_data,
+                            verbose=1, shuffle=True,
+                            callbacks=[model_checkpoint_cb,
+                                       early_stopping_cb,
+                                       reduce_lr_on_plateau_cb])
+        save_model(model, num_fold, modelStr)
+    else:
+        for train_index, valid_index in kf.split(ds_inputs):
+            num_fold += 1
+            print('Start KFold number {} from {}'.format(num_fold, nfolds))
+            train_data, valid_data = read_data(target_type=1, split='train',
+                                               train_index=train_index,valid_index=valid_index,
+                                               method='kfold')
 
 
-        # Get the number of samples in the training data
+
+        # Set the decay_steps
         # m = tf.data.experimental.cardinality(train_data).numpy()
-        # # Set the decay_steps
         # s = int(20 * m / BATCH_SIZE)
         # print('Learning Scheduling Decay_Steps:', s)
 
@@ -297,21 +330,21 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr=''):
                   callbacks=[model_checkpoint_cb,
                                    early_stopping_cb,
                              reduce_lr_on_plateau_cb])
-            #print('losses: ' + hist.history.losses[-1])
 
-            #print('Score log_loss: ', score[0])
-        if val_acc_best < max(history.history['val_accuracy']):
-            val_acc_best = max(history.history['val_accuracy'])
-            save_model(model, 'best', modelStr)
-            print('best model saved')
-        # save_model(model, num_fold, modelStr)
+        # Kfold Ensemble
+        # if val_acc_best < max(history.history['val_accuracy']):
+        #     val_acc_best = max(history.history['val_accuracy'])
+        #     save_model(model, 'best', modelStr)
+        #     print('best model saved')
+
+        # Kfold Best
+        save_model(model, num_fold, modelStr)
 
 
 #%%
 def test_model_and_submit(start=1, end=1, modelStr=''):
     img_rows, img_cols = IMAGE_SIZE,IMAGE_SIZE
-    # batch_size = 64
-    # random_state = 51
+
 
     print('Start testing............')
     test_data = read_data(target_type=1, split='test')
@@ -325,23 +358,23 @@ def test_model_and_submit(start=1, end=1, modelStr=''):
         test_ids.append(img_id)
 
 
-    # yfull_test = []
-    #
-    # for index in range(start, end + 1):
-    #     # Store test predictions
-    #     model = read_model(index, modelStr)
-    #     # test_prediction = model.predict(test_data, batch_size=32, verbose=1)
-    #     test_prediction = model.predict(test_data)
-    #
-    #     yfull_test.append(test_prediction)
+    yfull_test = []
+
+    for index in range(start, end + 1):
+        # Store test predictions
+        model = read_model(index, modelStr)
+        # test_prediction = model.predict(test_data, batch_size=32, verbose=1)
+        test_prediction = model.predict(test_data,verbose=1)
+
+        yfull_test.append(test_prediction)
 
     info_string = 'loss_' + modelStr \
                   + '_r_' + str(img_rows) \
                   + '_c_' + str(img_cols) \
                   + '_folds_' + str(end - start + 1)
-    model = read_model('best',modelStr)
-    test_res = model.predict(test_data)
-    # test_res = merge_several_folds_mean(yfull_test, end - start + 1)
+    # model = read_model('best',modelStr)
+    # test_res = model.predict(test_data)
+    test_res = merge_several_folds_mean(yfull_test, end - start + 1)
     create_submission(test_res, test_ids, info_string)
     print('finished')
 #%%
@@ -364,34 +397,11 @@ ds_inputs = np.array(DATA_DIR + 'train/' + xdf_dset['classname'] + '/' + xdf_dse
 ds_targets = xdf_dset['target']
 #%%
 # nfolds, nb_epoch, split
-# run_cross_validation(2, 5, 0.15, 'Resnet50')
-run_cross_validation(nfolds,n_epoch,0.15,"Resnet50")
+
+run_cross_validation(2,10,0.15,"EfficientNetV2B2",'split')
 # model.summary()
 
 # nb_epoch, split
 # run_one_fold_cross_validation(10, 0.1)
 #%%
-test_model_and_submit(1, 1, 'Resnet50')
-#%%
-
-#%%
-# read_data(target_type=1, split='train')
-#
-# #%%
-# ds_inputs = np.array(DATA_DIR + 'train/' + xdf_dset['classname'] + '/' + xdf_dset['img'])
-#
-# ds_targets = xdf_dset['target']
-# #%%
-# ds_inputs, ds_inputs_valid, ds_targets, ds_targets_valid = split_validation_set(ds_inputs, ds_targets, 0.2)
-#
-# #%%
-# ds_targets = process_target(1, ds_targets)
-#
-# ds_targets_valid = process_target(1, ds_targets_valid)
-#
-# #%%
-# list_ds = tf.data.Dataset.from_tensor_slices((ds_inputs, ds_targets))
-# list_ds_valid = tf.data.Dataset.from_tensor_slices((ds_inputs_valid, ds_targets_valid))
-# #%%
-# final_ds = list_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
-# final_ds_valid = list_ds_valid.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
+test_model_and_submit(0, 0, "EfficientNetV2B2")
