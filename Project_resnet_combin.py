@@ -144,8 +144,8 @@ def read_data(target_type,split='train',train_index=0,valid_index=0,method='spli
         val_targets = process_target(target_type, val_targets)
         #aug_targets = process_target(target_type, aug_targets)
 
-        train_ds = tf.data.Dataset.from_tensor_slices((train_data, train_targets))
-        val_ds = tf.data.Dataset.from_tensor_slices((val_data, val_targets))
+        train_ds = tf.data.Dataset.from_tensor_slices((train_data, train_targets)).shuffle(buffer_size=1000, seed=random_state)
+        val_ds = tf.data.Dataset.from_tensor_slices((val_data, val_targets)).shuffle(buffer_size=1000, seed=random_state)
         #aug_ds = tf.data.Dataset.from_tensor_slices((aug_data, aug_targets))
 
         final_train_ds = train_ds.map(process_path, num_parallel_calls=AUTOTUNE).batch(BATCH_SIZE)
@@ -301,7 +301,12 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr='', method=
     kf = KFold(n_splits=nfolds,
                shuffle=True, random_state=random_state)
     val_acc_best = 0
-    # for  train_drivers, test_drivers in kf.split(unique_drivers):
+
+    # Set the decay_steps
+    # m = tf.data.experimental.cardinality(train_data).numpy()
+    # s = int(20 * m / BATCH_SIZE)
+    # print('Learning Scheduling Decay_Steps:', s)
+
     if method=='split':
         model = model_definition()
         train_data, valid_data = read_data(target_type=1, split='train',
@@ -318,37 +323,35 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr='', method=
     else:
         for train_index, valid_index in kf.split(ds_inputs):
             num_fold += 1
-            print('Start KFold number {} from {}'.format(num_fold, nfolds))
+
             train_data, valid_data = read_data(target_type=1, split='train',
                                                train_index=train_index,valid_index=valid_index,
                                                method='kfold')
 
 
 
-        # Set the decay_steps
-        # m = tf.data.experimental.cardinality(train_data).numpy()
-        # s = int(20 * m / BATCH_SIZE)
-        # print('Learning Scheduling Decay_Steps:', s)
 
-        model = model_definition()
 
-        history = model.fit(train_data,
-                  # batch_size=batch_size,
-                  epochs=nb_epoch,
-                  validation_data = valid_data,
-                  verbose=1, shuffle=True,
-                  callbacks=[model_checkpoint_cb,
-                                   early_stopping_cb,
-                             reduce_lr_on_plateau_cb])
+            model = model_definition()
+            print('Start KFold number {} from {}'.format(num_fold, nfolds))
+            print(len(train_data))
+            history = model.fit(train_data,
+                      # batch_size=batch_size,
+                      epochs=nb_epoch,
+                      validation_data = valid_data,
+                      verbose=1, shuffle=True,
+                      callbacks=[model_checkpoint_cb,
+                                       early_stopping_cb,
+                                 reduce_lr_on_plateau_cb])
 
-        # Kfold Ensemble
-        # if val_acc_best < max(history.history['val_accuracy']):
-        #     val_acc_best = max(history.history['val_accuracy'])
-        #     save_model(model, 'best', modelStr)
-        #     print('best model saved')
+            # Kfold best
+            # if val_acc_best < max(history.history['val_accuracy']):
+            #     val_acc_best = max(history.history['val_accuracy'])
+            #     save_model(model, 'best', modelStr)
+            #     print('best model saved')
 
-        # Kfold Best
-        save_model(model, num_fold, modelStr)
+            # Kfold Ensemble
+            save_model(model, num_fold, modelStr)
 
 
 #%%
@@ -408,10 +411,13 @@ ds_targets = xdf_dset['target']
 #%%
 # nfolds, nb_epoch, split
 
-run_cross_validation(2,10,0.15,"EfficientNetV2B2-224",'split')
+run_cross_validation(2,10,0.15,"EfficientNetV2B2_K1",'kfold')
 # model.summary()
 
 # nb_epoch, split
 # run_one_fold_cross_validation(10, 0.1)
+ #%%
+test_model_and_submit(0, 0, "EfficientNetV2B2_Kfold")
 #%%
-test_model_and_submit(0, 0, "EfficientNetV2B2-224")
+for train_index, valid_index in kf.split(ds_inputs):
+    print(train_index,valid_index)
