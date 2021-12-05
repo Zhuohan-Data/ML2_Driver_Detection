@@ -31,7 +31,7 @@ from tensorflow.keras.initializers import glorot_uniform
 from tensorflow.keras.utils import to_categorical
 #%%
 # os.chdir('/home/ubuntu/ML/Driver')
-#os.chdir("/home/ubuntu/ML2/Project/")
+os.chdir("/home/ubuntu/ML2/Project/")
 
 ## Process images in parallel
 AUTOTUNE = tf.data.AUTOTUNE
@@ -44,7 +44,7 @@ sep = os.path.sep
 
 nfolds=5
 n_epoch = 5
-BATCH_SIZE = 32
+BATCH_SIZE = 8
 
 CHANNELS = 3
 IMAGE_SIZE = 224
@@ -66,6 +66,7 @@ color_type_global = 3
 # color_type = 1 - gray
 # color_type = 3 - RGB
 
+modelnames=['Resnet50','Resnet50']
 
 def process_target(target_type,target):
 
@@ -271,8 +272,6 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr='',method='
     # ReduceLROnPlateau callback
     reduce_lr_on_plateau_cb = keras.callbacks.ReduceLROnPlateau(factor=0.1, patience=1)
     num_fold = 0
-    kf = KFold(n_splits=nfolds,
-               shuffle=True, random_state=random_state)
     val_acc_best = 0
     # for  train_drivers, test_drivers in kf.split(unique_drivers):
     if method=='split':
@@ -296,6 +295,8 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr='',method='
         #     print('best model saved')
         save_model(model, num_fold, modelStr)
     else:
+        kf = KFold(n_splits=nfolds,
+                   shuffle=True, random_state=random_state)
         for train_index, valid_index in kf.split(ds_inputs):
             num_fold += 1
             print('Start KFold number {} from {}'.format(num_fold, nfolds))
@@ -328,7 +329,84 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr='',method='
             #     save_model(model, 'best', modelStr)
             #     print('best model saved')
             save_model(model, num_fold, modelStr)
-
+#%%
+# def run_ensemble(nfolds=10, nb_epoch=10, split=0.2, modelStr='',method='split',modelnames=[]):
+#     # ModelCheckpoint callback
+#     if not os.path.isdir('Checkpoints'):
+#         os.mkdir('Checkpoints')
+#     model_checkpoint_cb = keras.callbacks.ModelCheckpoint(filepath=os.path.join(os.getcwd(),'cache','Checkpoints'),
+#                                                           save_best_only=True,
+#                                                           save_weights_only=True)
+#     # EarlyStopping callback
+#     early_stopping_cb = keras.callbacks.EarlyStopping(patience=2, restore_best_weights=True)
+#     # ReduceLROnPlateau callback
+#     reduce_lr_on_plateau_cb = keras.callbacks.ReduceLROnPlateau(factor=0.1, patience=1)
+#     num_fold = 0
+#     val_acc_best = 0
+#     # for  train_drivers, test_drivers in kf.split(unique_drivers):
+#     if method=='split':
+#         # model = model_definition()
+#         model1 = read_model(num_fold,modelnames[0])
+#         model2 = read_model(1,modelnames[1])
+#         # y1 = model1(model1.input)
+#         # y2 = model2(model2.input)
+#         # outputs = keras.layers.average([y1,y2])
+#         # model = keras.Model(inputs=model1.input,outputs=outputs)
+#         model = (model1+model2)/2
+#         train_data, valid_data = read_data(target_type=1, split='train',
+#                                            method=method)
+#         history = model.fit(train_data,
+#                             # batch_size=batch_size,
+#                             epochs=nb_epoch,
+#                             validation_data=valid_data,
+#                             verbose=1, shuffle=True,
+#                             callbacks=[model_checkpoint_cb,
+#                                        early_stopping_cb,
+#                                        reduce_lr_on_plateau_cb])
+#         # print('losses: ' + hist.history.losses[-1])
+#
+#         # print('Score log_loss: ', score[0])
+#         # if val_acc_best < max(history.history['val_accuracy']):
+#         #     val_acc_best = max(history.history['val_accuracy'])
+#         #     save_model(model, 'best', modelStr)
+#         #     print('best model saved')
+#         save_model(model, num_fold, modelStr)
+#     else:
+#
+#         kf = KFold(n_splits=nfolds,
+#                    shuffle=True, random_state=random_state)
+#         for train_index, valid_index in kf.split(ds_inputs):
+#             num_fold += 1
+#             print('Start KFold number {} from {}'.format(num_fold, nfolds))
+#             train_data, valid_data = read_data(target_type=1, split='train',
+#                                                train_index=train_index,valid_index=valid_index,
+#                                                method='kfold')
+#
+#
+#             # Get the number of samples in the training data
+#             # m = tf.data.experimental.cardinality(train_data).numpy()
+#             # # Set the decay_steps
+#             # s = int(20 * m / BATCH_SIZE)
+#             # print('Learning Scheduling Decay_Steps:', s)
+#
+#             model = model_definition()
+#
+#             history = model.fit(train_data,
+#                       # batch_size=batch_size,
+#                       epochs=nb_epoch,
+#                       validation_data = valid_data,
+#                       verbose=1, shuffle=True,
+#                       callbacks=[model_checkpoint_cb,
+#                                        early_stopping_cb,
+#                                  reduce_lr_on_plateau_cb])
+#                 #print('losses: ' + hist.history.losses[-1])
+#
+#                 #print('Score log_loss: ', score[0])
+#             # if val_acc_best < max(history.history['val_accuracy']):
+#             #     val_acc_best = max(history.history['val_accuracy'])
+#             #     save_model(model, 'best', modelStr)
+#             #     print('best model saved')
+#             save_model(model, num_fold, modelStr)
 
 #%%
 def test_model_and_submit(start=1, end=1, modelStr=''):
@@ -368,6 +446,51 @@ def test_model_and_submit(start=1, end=1, modelStr=''):
     create_submission(test_res, test_ids, info_string)
     print('finished')
 #%%
+def test_ensemble_and_submit(start=1, end=1, modelStr='',modelnames=[1,2],method='split'):
+    img_rows, img_cols = IMAGE_SIZE,IMAGE_SIZE
+    # batch_size = 64
+    # random_state = 51
+
+    print('Start testing............')
+    test_data = read_data(target_type=1, split='test')
+
+    test_path = os.path.join(DATA_DIR, 'test', '*.jpg')
+    images = glob.glob(test_path)
+
+    test_ids = []
+    for img_path in images:
+        img_id = os.path.basename(img_path)
+        test_ids.append(img_id)
+
+
+    yfull_test = []
+    if method=='split':
+        model1 = read_model(1,modelnames[0])
+        test_prediction = model1.predict(test_data, verbose=1)
+
+        yfull_test.append(test_prediction)
+
+        model2 = read_model(1,modelnames[1])
+        test_prediction = model2.predict(test_data, verbose=1)
+        yfull_test.append(test_prediction)
+    else:
+        for index in range(start, end + 1):
+            # Store test predictions
+            model = read_model(index, modelStr)
+            test_prediction = model.predict(test_data,verbose=1)
+
+            yfull_test.append(test_prediction)
+
+    info_string = 'loss_' + modelStr \
+                  + '_r_' + str(img_rows) \
+                  + '_c_' + str(img_cols) \
+                  + '_folds_' + str(end - start + 1)
+    # model = read_model('best',modelStr)
+    # test_res = model.predict(test_data)
+    test_res = merge_several_folds_mean(yfull_test, end - start + 1)
+    create_submission(test_res, test_ids, info_string)
+    print('finished')
+#%%
 xdf_dset = pd.read_csv(CSV_DIR)
 class_names = np.sort(xdf_dset['classname'].unique())
 x = lambda x : tf.argmax(x ==  class_names).numpy()
@@ -388,10 +511,12 @@ ds_targets = xdf_dset['target']
 #%%
 # nfolds, nb_epoch, split
 # run_cross_validation(2, 5, 0.15, 'Resnet50')
-run_cross_validation(nfolds,n_epoch,0.15,"Resnet50",method='split')
+# run_cross_validation(nfolds,n_epoch,0.15,"Resnet50",method='split')
+# run_ensemble(nfolds,n_epoch,0.15,"Ensemble2Resnet50",method='split',modelnames=modelnames)
 # model.summary()
 
 # nb_epoch, split
 # run_one_fold_cross_validation(10, 0.1)
 #%%
-test_model_and_submit(1, nfolds, 'Resnet50')
+# test_model_and_submit(0,0, 'Resnet50')
+test_ensemble_and_submit(0,0,'Resnet50',modelnames=modelnames)
