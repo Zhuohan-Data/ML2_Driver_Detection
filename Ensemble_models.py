@@ -35,16 +35,15 @@ from tensorflow.keras.utils import to_categorical
 
 ## Process images in parallel
 AUTOTUNE = tf.data.AUTOTUNE
-# os.chdir('/home/ubuntu/ML/Driver')
-# DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
-# CSV_DIR = os.getcwd()+os.path.sep+'driver_imgs_list.csv'
-DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
-CSV_DIR = os.getcwd()+os.path.sep+'data'+os.path.sep+'driver_imgs_list.csv'
+DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
+CSV_DIR = os.getcwd()+os.path.sep+'driver_imgs_list.csv'
+# DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
+# CSV_DIR = os.getcwd()+os.path.sep+'data'+os.path.sep+'driver_imgs_list.csv'
 sep = os.path.sep
 
 nfolds=5
-n_epoch = 5
-BATCH_SIZE = 8
+n_epoch = 10
+BATCH_SIZE = 16
 
 CHANNELS = 3
 IMAGE_SIZE = 224
@@ -63,10 +62,7 @@ LR = 1e-3
 # color type: 1 - grey, 3 - rgb
 color_type_global = 3
 
-# color_type = 1 - gray
-# color_type = 3 - RGB
-
-modelnames=['Resnet50','Resnet50']
+modelnames=["EfficientNetV2B2_K","EfficientNetV2B3_Kfold_epoch10"]
 
 def process_target(target_type,target):
 
@@ -242,33 +238,7 @@ def test_ensemble_and_submit(start=1, end=1, modelStr='',modelnames=[1,2],method
     # test_res = model.predict(test_data)
     create_submission(test_res, test_ids, info_string)
     print('finished')
-#%%
-xdf_dset = pd.read_csv(CSV_DIR)
-class_names = np.sort(xdf_dset['classname'].unique())
-x = lambda x : tf.argmax(x ==  class_names).numpy()
-# split_list = []
-# for i in range(len(xdf_dset)):
-#     split_list.append('train') if xdf_dset['subject'][i] == 'p002' else split_list.append('validation')
-# xdf_dset['split'] = split_list
-xdf_dset['target'] = xdf_dset['classname'].apply(x)
-# xdf_dset = xdf_data[xdf_data["split"] == 'train'].copy()
 
-# driver_id = xdf_dset['subject']
-# unique_drivers = sorted(list(set(driver_id)))
-# print('Unique drivers: {}'.format(len(unique_drivers)))
-# print(unique_drivers)
-#%%
-ds_inputs = np.array(DATA_DIR + 'train/' + xdf_dset['classname'] + '/' + xdf_dset['img'])
-ds_targets = xdf_dset['target']
-#%%
-# nfolds, nb_epoch, split
-# run_cross_validation(2, 5, 0.15, 'Resnet50')
-# run_cross_validation(nfolds,n_epoch,0.15,"Resnet50",method='split')
-# run_ensemble(nfolds,n_epoch,0.15,"Ensemble2Resnet50",method='split',modelnames=modelnames)
-# model.summary()
-
-# nb_epoch, split
-# run_one_fold_cross_validation(10, 0.1)
 #%%
 # test_model_and_submit(0,0, 'Resnet50')
-test_ensemble_and_submit(1,nfolds,'Resnet50',modelnames=modelnames,method='split')
+test_ensemble_and_submit(1,nfolds,"EfficientNetEnsemble",modelnames=modelnames,method='kfold')

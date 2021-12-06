@@ -30,20 +30,20 @@ import random
 from tensorflow.keras.initializers import glorot_uniform
 from tensorflow.keras.utils import to_categorical
 #%%
-os.chdir('/home/ubuntu/ML/Driver')
+# os.chdir('/home/ubuntu/ML/Driver')
 #os.chdir("/home/ubuntu/ML2/Project/")
-
+os.system("sudo pip install tf-nightly-gpu")
 ## Process images in parallel
 AUTOTUNE = tf.data.AUTOTUNE
 
-DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
-CSV_DIR = os.getcwd()+os.path.sep+'driver_imgs_list.csv'
-#DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
-#CSV_DIR = os.getcwd()+os.path.sep+'data'+os.path.sep+'driver_imgs_list.csv'
+# DATA_DIR = os.getcwd()  + os.path.sep +'imgs' + os.path.sep
+# CSV_DIR = os.getcwd()+os.path.sep+'driver_imgs_list.csv'
+DATA_DIR = os.getcwd()+os.path.sep+'data' + os.path.sep +'imgs' + os.path.sep
+CSV_DIR = os.getcwd()+os.path.sep+'data'+os.path.sep+'driver_imgs_list.csv'
 sep = os.path.sep
 
 nfolds=5
-n_epoch = 5
+n_epoch = 10
 BATCH_SIZE = 16
 
 CHANNELS = 3
@@ -56,15 +56,12 @@ tf.random.set_seed(SEED)
 weight_init = glorot_uniform(seed=SEED)
 random_state = 51
 
-#DROPOUT = 0.2
+
 LR = 1e-3
 
 
 # color type: 1 - grey, 3 - rgb
 color_type_global = 3
-
-# color_type = 1 - gray
-# color_type = 3 - RGB
 
 
 def process_target(target_type,target):
@@ -115,9 +112,6 @@ def process_path_aug(feature, target):
     return aug_img, label
 
 def process_path_test(feature):
-    # Processing Label
-
-    # label = target
     # Processing feature
     # load the raw data from the file as a string
     file_path = feature
@@ -194,7 +188,6 @@ def create_submission(predictions, test_id, info):
     result1 = pd.DataFrame(predictions, columns=['c0', 'c1', 'c2', 'c3',
                                                  'c4', 'c5', 'c6', 'c7',
                                                  'c8', 'c9'])
-    #result1.loc['img',:] = pd.Series(test_id, index=result1.index)
     result1.insert(loc=0, column='img', value=pd.Series(test_id, index=result1.index))
     now = datetime.datetime.now()
     if not os.path.isdir('subm'):
@@ -250,8 +243,8 @@ def model_definition():
     #pretrained_model = keras.applications.densenet.DenseNet169(include_top=False, weights='imagenet')
     #pretrained_model = keras.applications.densenet.DenseNet201(include_top=False, weights='imagenet')
     #pretrained_model = tf.keras.applications.efficientnet.EfficientNetB2(include_top=False, weights='imagenet')
-    pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2B2(include_top=False, weights='imagenet')
-    #pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2B3(include_top=False, weights='imagenet')
+    # pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2B2(include_top=False, weights='imagenet')
+    pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2B3(include_top=False, weights='imagenet')
     #pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2M(include_top=False, weights='imagenet')
     #pretrained_model = tf.keras.applications.efficientnet_v2.EfficientNetV2L(include_top=False, weights='imagenet')
     #pretrained_model = tf.keras.applications.inception_v3.InceptionV3(include_top=False, weights='imagenet')
@@ -312,7 +305,6 @@ def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr='', method=
         train_data, valid_data = read_data(target_type=1, split='train',
                                            method=method)
         history = model.fit(train_data,
-                            # batch_size=batch_size,
                             epochs=nb_epoch,
                             validation_data=valid_data,
                             verbose=1, shuffle=True,
@@ -411,13 +403,7 @@ ds_targets = xdf_dset['target']
 #%%
 # nfolds, nb_epoch, split
 
-run_cross_validation(2,10,0.15,"EfficientNetV2B2_K1",'kfold')
-# model.summary()
+run_cross_validation(nfolds,n_epoch,0.15,"EfficientNetV2B3_Kfold_epoch10",'kfold')
 
-# nb_epoch, split
-# run_one_fold_cross_validation(10, 0.1)
  #%%
-test_model_and_submit(0, 0, "EfficientNetV2B2_Kfold")
-#%%
-for train_index, valid_index in kf.split(ds_inputs):
-    print(train_index,valid_index)
+test_model_and_submit(1, nfolds, "EfficientNetV2B3_Kfold_epoch10")
