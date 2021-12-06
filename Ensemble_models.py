@@ -31,7 +31,7 @@ from tensorflow.keras.initializers import glorot_uniform
 from tensorflow.keras.utils import to_categorical
 #%%
 # os.chdir('/home/ubuntu/ML/Driver')
-os.chdir("/home/ubuntu/ML2/Project/")
+# os.chdir("/home/ubuntu/ML2/Project/")
 
 ## Process images in parallel
 AUTOTUNE = tf.data.AUTOTUNE
@@ -194,257 +194,6 @@ def merge_several_folds_geom(data, nfolds):
     a = np.power(a, 1/nfolds)
     return a.tolist()
 
-
-def copy_selected_drivers(train_data, train_target, driver_id, driver_list):
-    data = []
-    target = []
-    index = []
-    for i in range(len(driver_id)):
-        if driver_id[i] in driver_list:
-            data.append(train_data[i])
-            target.append(train_target[i])
-            index.append(i)
-    data = np.array(data, dtype=np.float32)
-    target = np.array(target, dtype=np.float32)
-    index = np.array(index, dtype=np.uint32)
-    return data, target, index
-
-
-def model_definition():
-    # Add the pretrained layers
-    pretrained_model = keras.applications.ResNet50(include_top=False, weights='imagenet')
-
-    # Add GlobalAveragePooling2D layer
-    dropout = keras.layers.Dropout(rate=0.5)(pretrained_model.output)
-
-    # Add GlobalAveragePooling2D layer
-    average_pooling = keras.layers.GlobalAveragePooling2D()(dropout)
-
-    # Add the output layer
-    output = keras.layers.Dense(10, activation='softmax')(average_pooling)
-
-    # Get the model
-    model = keras.Model(inputs=pretrained_model.input, outputs=output)
-
-
-    # learning rate scheduling
-    #
-    # lr_schedule = keras.optimizers.schedules.ExponentialDecay(
-    #     initial_learning_rate=0.01,
-    #     decay_steps = s,
-    #     decay_rate=0.1)
-
-    #SGD = keras.optimizers.SGD(learning_rate=0.001)
-    Adam = keras.optimizers.Adam(learning_rate=0.001)
-    #Adadelta = keras.optimizers.Adadelta(learning_rate=0.001)
-    model.compile(optimizer=Adam, loss='categorical_crossentropy', metrics=['accuracy'])
-    return model
-
-
-def run_cross_validation(nfolds=10, nb_epoch=10, split=0.2, modelStr='',method='split'):
-
-    # Now it loads color image
-    # input image dimensions
-    # img_rows, img_cols = 100, 100
-    # batch_size = 64
-
-
-    # print(train_data)
-    # ishuf_train_data = []
-    # shuf_train_target = []
-    # index_shuf = range(len(train_target))
-    # shuffle(index_shuf)
-    # for i in index_shuf:
-    #     shuf_train_data.append(train_data[i])
-    #     shuf_train_target.append(train_target[i])
-
-    # yfull_train = dict()
-    # yfull_test = []
-
-    # ModelCheckpoint callback
-    if not os.path.isdir('Checkpoints'):
-        os.mkdir('Checkpoints')
-    model_checkpoint_cb = keras.callbacks.ModelCheckpoint(filepath=os.path.join(os.getcwd(),'cache','Checkpoints'),
-                                                          save_best_only=True,
-                                                          save_weights_only=True)
-    # EarlyStopping callback
-    early_stopping_cb = keras.callbacks.EarlyStopping(patience=2, restore_best_weights=True)
-    # ReduceLROnPlateau callback
-    reduce_lr_on_plateau_cb = keras.callbacks.ReduceLROnPlateau(factor=0.1, patience=1)
-    num_fold = 0
-    val_acc_best = 0
-    # for  train_drivers, test_drivers in kf.split(unique_drivers):
-    if method=='split':
-        model = model_definition()
-        train_data, valid_data = read_data(target_type=1, split='train',
-                                           method=method)
-        history = model.fit(train_data,
-                            # batch_size=batch_size,
-                            epochs=nb_epoch,
-                            validation_data=valid_data,
-                            verbose=1, shuffle=True,
-                            callbacks=[model_checkpoint_cb,
-                                       early_stopping_cb,
-                                       reduce_lr_on_plateau_cb])
-        # print('losses: ' + hist.history.losses[-1])
-
-        # print('Score log_loss: ', score[0])
-        # if val_acc_best < max(history.history['val_accuracy']):
-        #     val_acc_best = max(history.history['val_accuracy'])
-        #     save_model(model, 'best', modelStr)
-        #     print('best model saved')
-        save_model(model, num_fold, modelStr)
-    else:
-        kf = KFold(n_splits=nfolds,
-                   shuffle=True, random_state=random_state)
-        for train_index, valid_index in kf.split(ds_inputs):
-            num_fold += 1
-            print('Start KFold number {} from {}'.format(num_fold, nfolds))
-            train_data, valid_data = read_data(target_type=1, split='train',
-                                               train_index=train_index,valid_index=valid_index,
-                                               method='kfold')
-
-
-            # Get the number of samples in the training data
-            # m = tf.data.experimental.cardinality(train_data).numpy()
-            # # Set the decay_steps
-            # s = int(20 * m / BATCH_SIZE)
-            # print('Learning Scheduling Decay_Steps:', s)
-
-            model = model_definition()
-
-            history = model.fit(train_data,
-                      # batch_size=batch_size,
-                      epochs=nb_epoch,
-                      validation_data = valid_data,
-                      verbose=1, shuffle=True,
-                      callbacks=[model_checkpoint_cb,
-                                       early_stopping_cb,
-                                 reduce_lr_on_plateau_cb])
-                #print('losses: ' + hist.history.losses[-1])
-
-                #print('Score log_loss: ', score[0])
-            # if val_acc_best < max(history.history['val_accuracy']):
-            #     val_acc_best = max(history.history['val_accuracy'])
-            #     save_model(model, 'best', modelStr)
-            #     print('best model saved')
-            save_model(model, num_fold, modelStr)
-#%%
-# def run_ensemble(nfolds=10, nb_epoch=10, split=0.2, modelStr='',method='split',modelnames=[]):
-#     # ModelCheckpoint callback
-#     if not os.path.isdir('Checkpoints'):
-#         os.mkdir('Checkpoints')
-#     model_checkpoint_cb = keras.callbacks.ModelCheckpoint(filepath=os.path.join(os.getcwd(),'cache','Checkpoints'),
-#                                                           save_best_only=True,
-#                                                           save_weights_only=True)
-#     # EarlyStopping callback
-#     early_stopping_cb = keras.callbacks.EarlyStopping(patience=2, restore_best_weights=True)
-#     # ReduceLROnPlateau callback
-#     reduce_lr_on_plateau_cb = keras.callbacks.ReduceLROnPlateau(factor=0.1, patience=1)
-#     num_fold = 0
-#     val_acc_best = 0
-#     # for  train_drivers, test_drivers in kf.split(unique_drivers):
-#     if method=='split':
-#         # model = model_definition()
-#         model1 = read_model(num_fold,modelnames[0])
-#         model2 = read_model(1,modelnames[1])
-#         # y1 = model1(model1.input)
-#         # y2 = model2(model2.input)
-#         # outputs = keras.layers.average([y1,y2])
-#         # model = keras.Model(inputs=model1.input,outputs=outputs)
-#         model = (model1+model2)/2
-#         train_data, valid_data = read_data(target_type=1, split='train',
-#                                            method=method)
-#         history = model.fit(train_data,
-#                             # batch_size=batch_size,
-#                             epochs=nb_epoch,
-#                             validation_data=valid_data,
-#                             verbose=1, shuffle=True,
-#                             callbacks=[model_checkpoint_cb,
-#                                        early_stopping_cb,
-#                                        reduce_lr_on_plateau_cb])
-#         # print('losses: ' + hist.history.losses[-1])
-#
-#         # print('Score log_loss: ', score[0])
-#         # if val_acc_best < max(history.history['val_accuracy']):
-#         #     val_acc_best = max(history.history['val_accuracy'])
-#         #     save_model(model, 'best', modelStr)
-#         #     print('best model saved')
-#         save_model(model, num_fold, modelStr)
-#     else:
-#
-#         kf = KFold(n_splits=nfolds,
-#                    shuffle=True, random_state=random_state)
-#         for train_index, valid_index in kf.split(ds_inputs):
-#             num_fold += 1
-#             print('Start KFold number {} from {}'.format(num_fold, nfolds))
-#             train_data, valid_data = read_data(target_type=1, split='train',
-#                                                train_index=train_index,valid_index=valid_index,
-#                                                method='kfold')
-#
-#
-#             # Get the number of samples in the training data
-#             # m = tf.data.experimental.cardinality(train_data).numpy()
-#             # # Set the decay_steps
-#             # s = int(20 * m / BATCH_SIZE)
-#             # print('Learning Scheduling Decay_Steps:', s)
-#
-#             model = model_definition()
-#
-#             history = model.fit(train_data,
-#                       # batch_size=batch_size,
-#                       epochs=nb_epoch,
-#                       validation_data = valid_data,
-#                       verbose=1, shuffle=True,
-#                       callbacks=[model_checkpoint_cb,
-#                                        early_stopping_cb,
-#                                  reduce_lr_on_plateau_cb])
-#                 #print('losses: ' + hist.history.losses[-1])
-#
-#                 #print('Score log_loss: ', score[0])
-#             # if val_acc_best < max(history.history['val_accuracy']):
-#             #     val_acc_best = max(history.history['val_accuracy'])
-#             #     save_model(model, 'best', modelStr)
-#             #     print('best model saved')
-#             save_model(model, num_fold, modelStr)
-
-#%%
-def test_model_and_submit(start=1, end=1, modelStr=''):
-    img_rows, img_cols = IMAGE_SIZE,IMAGE_SIZE
-    # batch_size = 64
-    # random_state = 51
-
-    print('Start testing............')
-    test_data = read_data(target_type=1, split='test')
-
-    test_path = os.path.join(DATA_DIR, 'test', '*.jpg')
-    images = glob.glob(test_path)
-
-    test_ids = []
-    for img_path in images:
-        img_id = os.path.basename(img_path)
-        test_ids.append(img_id)
-
-
-    yfull_test = []
-
-    for index in range(start, end + 1):
-        # Store test predictions
-        model = read_model(index, modelStr)
-        # test_prediction = model.predict(test_data, batch_size=32, verbose=1)
-        test_prediction = model.predict(test_data,verbose=1)
-
-        yfull_test.append(test_prediction)
-
-    info_string = 'loss_' + modelStr \
-                  + '_r_' + str(img_rows) \
-                  + '_c_' + str(img_cols) \
-                  + '_folds_' + str(end - start + 1)
-    # model = read_model('best',modelStr)
-    # test_res = model.predict(test_data)
-    test_res = merge_several_folds_mean(yfull_test, end - start + 1)
-    create_submission(test_res, test_ids, info_string)
-    print('finished')
 #%%
 def test_ensemble_and_submit(start=1, end=1, modelStr='',modelnames=[1,2],method='split'):
     img_rows, img_cols = IMAGE_SIZE,IMAGE_SIZE
@@ -473,21 +222,24 @@ def test_ensemble_and_submit(start=1, end=1, modelStr='',modelnames=[1,2],method
         model2 = read_model(1,modelnames[1])
         test_prediction = model2.predict(test_data, verbose=1)
         yfull_test.append(test_prediction)
+
+        test_res = merge_several_folds_mean(yfull_test, 2)
     else:
-        for index in range(start, end + 1):
-            # Store test predictions
-            model = read_model(index, modelStr)
-            test_prediction = model.predict(test_data,verbose=1)
+        for i in modelnames:
+            for index in range(start, end + 1):
+                # Store test predictions
+                model = read_model(index, i)
+                test_prediction = model.predict(test_data,verbose=1)
 
-            yfull_test.append(test_prediction)
+                yfull_test.append(test_prediction)
 
+        test_res = merge_several_folds_mean(yfull_test, (end - start + 1)*len(modelnames))
     info_string = 'loss_' + modelStr \
                   + '_r_' + str(img_rows) \
                   + '_c_' + str(img_cols) \
                   + '_folds_' + str(end - start + 1)
     # model = read_model('best',modelStr)
     # test_res = model.predict(test_data)
-    test_res = merge_several_folds_mean(yfull_test, end - start + 1)
     create_submission(test_res, test_ids, info_string)
     print('finished')
 #%%
@@ -501,10 +253,10 @@ x = lambda x : tf.argmax(x ==  class_names).numpy()
 xdf_dset['target'] = xdf_dset['classname'].apply(x)
 # xdf_dset = xdf_data[xdf_data["split"] == 'train'].copy()
 
-driver_id = xdf_dset['subject']
-unique_drivers = sorted(list(set(driver_id)))
-print('Unique drivers: {}'.format(len(unique_drivers)))
-print(unique_drivers)
+# driver_id = xdf_dset['subject']
+# unique_drivers = sorted(list(set(driver_id)))
+# print('Unique drivers: {}'.format(len(unique_drivers)))
+# print(unique_drivers)
 #%%
 ds_inputs = np.array(DATA_DIR + 'train/' + xdf_dset['classname'] + '/' + xdf_dset['img'])
 ds_targets = xdf_dset['target']
@@ -519,4 +271,4 @@ ds_targets = xdf_dset['target']
 # run_one_fold_cross_validation(10, 0.1)
 #%%
 # test_model_and_submit(0,0, 'Resnet50')
-test_ensemble_and_submit(0,0,'Resnet50',modelnames=modelnames)
+test_ensemble_and_submit(1,nfolds,'Resnet50',modelnames=modelnames,method='split')
