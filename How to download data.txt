@@ -1,0 +1,12 @@
+How to use kaggle api to download data?
+1. pip install kaggle
+2. change directory to desired data directory and run below
+~/.local/bin/kaggle competitions download -c state-farm-distracted-driver-detection
+3. make sure upload xxx.json(your kaggle api token) to ~/.kaggle or you will get error in step2
+(Reference: https://github.com/Kaggle/kaggle-api)
+
+Use kaggle api to upload submission
+~/.local/bin/kaggle competitions submit -c state-farm-distracted-driver-detection -m "Message" -f submission.csv
+
+
+
