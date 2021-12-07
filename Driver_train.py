@@ -404,6 +404,7 @@ ds_targets = xdf_dset['target']
 # nfolds, nb_epoch, split
 
 run_cross_validation(nfolds,n_epoch,0.15,"EfficientNetV2B3_Kfold_epoch10",'kfold')
-
+# run_cross_validation(nfolds,n_epoch,0.15,"EfficientNetV2B3_normal",'split')
  #%%
 test_model_and_submit(1, nfolds, "EfficientNetV2B3_Kfold_epoch10")
+# test_model_and_submit(0,0, "EfficientNetV2B3_normal")
